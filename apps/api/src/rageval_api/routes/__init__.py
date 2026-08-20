@@ -1,0 +1,33 @@
+from rageval_api.routes import (
+    artifacts,
+    chunking,
+    content,
+    embedding,
+    experiments,
+    health,
+    indexing,
+    llm,
+    models,
+    prep,
+    projects,
+    prompts,
+    retrieve,
+    testsets,
+)
+
+__all__ = [
+    "artifacts",
+    "chunking",
+    "content",
+    "embedding",
+    "experiments",
+    "health",
+    "indexing",
+    "llm",
+    "models",
+    "prep",
+    "projects",
+    "prompts",
+    "retrieve",
+    "testsets",
+]

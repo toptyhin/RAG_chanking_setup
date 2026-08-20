@@ -1,0 +1,128 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "rageval"
+version = "0.1.0"
+description = "Local RAG Preparer & Evaluator"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+  "fastapi==0.139.1",
+  "uvicorn[standard]==0.51.0",
+  "pydantic==2.13.4",
+  "pydantic-settings==2.14.2",
+  "sqlalchemy==2.0.51",
+  "aiosqlite==0.22.1",
+  "alembic==1.18.5",
+  "httpx==0.28.1",
+  "python-multipart==0.0.32",
+  "aiofiles==25.1.0",
+  "orjson==3.11.9",
+  "sse-starlette==3.4.5",
+  "tenacity==9.1.4",
+  "greenlet==3.5.3",
+  "rich==15.0.0",
+  "tqdm==4.68.4",
+  "pypdf==6.14.2",
+  "numpy==2.5.1",
+  "qdrant-client==1.18.0",
+  "bm25s==0.3.9",
+  "jinja2==3.1.6",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest==9.1.1",
+  "pytest-asyncio==1.4.0",
+  "ruff==0.15.21",
+  "python-doctor==2026.5.11",
+  "mypy==2.3.0",
+]
+ml = [
+  "sentence-transformers==5.6.0",
+  "torch==2.13.0",
+  "huggingface-hub==1.23.0",
+]
+chunkers = [
+  "semchunk==4.1.1",
+  "chunklet-py==2.3.2",
+  "littletree==0.9.1",
+  "defusedxml==0.7.1",
+  "tiktoken==0.13.0",
+]
+# Docker API image pins the same set in requirements-api.txt (keep in sync).
+
+[tool.hatch.build.targets.wheel]
+packages = [
+  "packages/domain/src/rageval_domain",
+  "packages/prep/src/rageval_prep",
+  "packages/chunking/src/rageval_chunking",
+  "packages/embedding/src/rageval_embedding",
+  "packages/index/src/rageval_index",
+  "packages/retrieval/src/rageval_retrieval",
+  "packages/rerank/src/rageval_rerank",
+  "packages/eval/src/rageval_eval",
+  "packages/testgen/src/rageval_testgen",
+  "packages/optimize/src/rageval_optimize",
+  "packages/report/src/rageval_report",
+  "packages/orchestrator/src/rageval_orchestrator",
+  "adapters/metadb_sqlite/src/rageval_metadb_sqlite",
+  "adapters/storage_fs/src/rageval_storage_fs",
+  "adapters/vectordb_qdrant/src/rageval_vectordb_qdrant",
+  "adapters/cache_fs/src/rageval_cache_fs",
+  "adapters/queue_local/src/rageval_queue_local",
+  "adapters/hf_hub/src/rageval_hf_hub",
+  "adapters/llm_providers/src/rageval_llm_providers",
+  "adapters/embedding_providers/src/rageval_embedding_providers",
+  "apps/api/src/rageval_api",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = [
+  ".",
+
+  "packages/domain/src",
+  "packages/prep/src",
+  "packages/chunking/src",
+  "packages/embedding/src",
+  "packages/index/src",
+  "packages/retrieval/src",
+  "packages/rerank/src",
+  "packages/eval/src",
+  "packages/testgen/src",
+  "packages/optimize/src",
+  "packages/report/src",
+  "packages/orchestrator/src",
+  "adapters/metadb_sqlite/src",
+  "adapters/storage_fs/src",
+  "adapters/vectordb_qdrant/src",
+  "adapters/cache_fs/src",
+  "adapters/queue_local/src",
+  "adapters/hf_hub/src",
+  "adapters/llm_providers/src",
+  "adapters/embedding_providers/src",
+  "apps/api/src",
+]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.python-doctor]
+profile = "web"
+
+[tool.mypy]
+python_version = "3.12"
+ignore_missing_imports = true
+check_untyped_defs = false
+warn_return_any = false
+pretty = true
+packages = [
+  "rageval_domain",
+  "rageval_api",
+]

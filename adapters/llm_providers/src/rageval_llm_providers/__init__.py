@@ -1,0 +1,80 @@
+"""LLM provider adapters (Ollama / OpenRouter / GigaChat) via HTTP."""
+
+from rageval_llm_providers.ca import httpx_verify_arg, resolve_gigachat_ca_bundle
+from rageval_llm_providers.config import (
+    GigaChatSettings,
+    LlmConfig,
+    LlmConfigStore,
+    OllamaSettings,
+    OpenRouterSettings,
+    TextLlmProvider,
+    mask_secret,
+)
+from rageval_llm_providers.factory import build_provider, list_model_infos, test_connection
+from rageval_llm_providers.limits import ModelLimits, TOKEN_ESTIMATE_NOTE, estimate_tokens
+from rageval_llm_providers.catalog import ModelPurpose, RemoteModelInfo
+from rageval_llm_providers.prompts import (
+    DOCUMENT_PLACEHOLDER,
+    SCHEMA_PLACEHOLDER,
+    PROMPT_ID_RAG_QUESTION_PREP,
+    DEFAULT_RAG_QUESTION_PREP_BODY,
+    PromptCatalog,
+    PromptStore,
+    PromptTemplate,
+    PromptVersion,
+    default_question_prep_schema,
+    validate_response_schema,
+)
+from rageval_llm_providers.protocol import ConnectionTestResult, LlmProvider
+from rageval_llm_providers.question_prep import (
+    QUESTION_PREP_JSON_SCHEMA,
+    QUESTION_PREP_TOTAL,
+    PreparedQuestion,
+    allocate_questions_across_parts,
+    parse_prepared_questions,
+    part_question_count,
+    plan_document_parts,
+    question_prep_schema,
+    select_balanced_questions,
+)
+
+__all__ = [
+    "ConnectionTestResult",
+    "DEFAULT_RAG_QUESTION_PREP_BODY",
+    "DOCUMENT_PLACEHOLDER",
+    "SCHEMA_PLACEHOLDER",
+    "GigaChatSettings",
+    "LlmConfig",
+    "LlmConfigStore",
+    "LlmProvider",
+    "ModelLimits",
+    "ModelPurpose",
+    "OllamaSettings",
+    "OpenRouterSettings",
+    "PROMPT_ID_RAG_QUESTION_PREP",
+    "PreparedQuestion",
+    "QUESTION_PREP_JSON_SCHEMA",
+    "QUESTION_PREP_TOTAL",
+    "PromptCatalog",
+    "PromptStore",
+    "PromptTemplate",
+    "PromptVersion",
+    "RemoteModelInfo",
+    "TOKEN_ESTIMATE_NOTE",
+    "TextLlmProvider",
+    "allocate_questions_across_parts",
+    "build_provider",
+    "default_question_prep_schema",
+    "estimate_tokens",
+    "httpx_verify_arg",
+    "list_model_infos",
+    "mask_secret",
+    "parse_prepared_questions",
+    "part_question_count",
+    "plan_document_parts",
+    "question_prep_schema",
+    "resolve_gigachat_ca_bundle",
+    "select_balanced_questions",
+    "test_connection",
+    "validate_response_schema",
+]

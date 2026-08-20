@@ -1,0 +1,81 @@
+# syntax=docker/dockerfile:1.7
+# Multi-stage: heavy pip deps cached separately from app source.
+
+FROM python:3.12-slim AS base
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_DEFAULT_TIMEOUT=100
+WORKDIR /app
+
+# -----------------------------------------------------------------------------
+# deps: torch / ST / API wheels — invalidated only when requirements-api.txt changes
+# -----------------------------------------------------------------------------
+FROM base AS deps
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends build-essential \
+  && rm -rf /var/lib/apt/lists/*
+
+COPY requirements-api.txt ./
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install -U pip \
+    && pip install -r requirements-api.txt
+
+# -----------------------------------------------------------------------------
+# runtime: slim image + site-packages from deps + project sources
+# -----------------------------------------------------------------------------
+FROM base AS runtime
+# OpenMP for torch/numpy; ca-certificates for optional GigaChat Russian CA
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends libgomp1 ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
+
+COPY --from=deps /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
+COPY --from=deps /usr/local/bin /usr/local/bin
+
+COPY pyproject.toml README.md ./
+COPY packages ./packages
+COPY adapters ./adapters
+COPY apps/api ./apps/api
+
+# Optional Russian Trusted CA for GigaChat (certs/*.crt). Build succeeds if none present.
+# Only PEM (BEGIN CERTIFICATE) — DER/GOST dumps break OpenSSL cafile with
+# X509: NO_CERTIFICATE_OR_CRL_FOUND.
+COPY certs/ /tmp/certs/
+RUN mkdir -p /usr/local/share/ca-certificates/rageval /etc/ssl/certs/rageval \
+  && found=0 \
+  && for f in /tmp/certs/*.crt /tmp/certs/*.pem /tmp/certs/*.cer; do \
+       [ -f "$f" ] || continue; \
+       if grep -q -- "-----BEGIN CERTIFICATE-----" "$f"; then \
+         cp "$f" /usr/local/share/ca-certificates/rageval/; \
+         found=1; \
+       else \
+         echo "skip non-PEM CA: $f"; \
+       fi; \
+     done \
+  && if [ "$found" = "1" ]; then \
+       cat /usr/local/share/ca-certificates/rageval/* > /etc/ssl/certs/rageval/ca-bundle.pem; \
+       update-ca-certificates; \
+     fi \
+  && rm -rf /tmp/certs
+
+# Install only the local package; deps already present (fast on code changes)
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --no-cache-dir --no-deps .
+
+ENV DATA_DIR=/data
+ENV SQLITE_URL=sqlite+aiosqlite:////data/rageval.db
+ENV QDRANT_URL=http://qdrant:6333
+ENV EMBEDDING_PROVIDER=sentence_transformers
+ENV EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
+ENV HF_HOME=/models
+ENV HUGGINGFACE_HUB_CACHE=/models/hub
+ENV TRANSFORMERS_CACHE=/models/transformers
+ENV SENTENCE_TRANSFORMERS_HOME=/models/sentence-transformers
+# Used when present (created at build if certs/ had CA files)
+ENV GIGACHAT_CA_BUNDLE=/etc/ssl/certs/rageval/ca-bundle.pem
+# Set at runtime via compose/env: HF_TOKEN / HUGGING_FACE_HUB_TOKEN
+
+EXPOSE 8000
+
+CMD ["uvicorn", "rageval_api.main:app", "--app-dir", "apps/api/src", "--host", "0.0.0.0", "--port", "8000"]

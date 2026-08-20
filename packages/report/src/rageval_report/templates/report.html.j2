@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>rageval report {{ run_id }}</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 2rem; color: #1a1a1a; }
+    h1, h2 { margin-bottom: 0.4rem; }
+    .muted { color: #666; }
+    .disclaimer { background: #fff8e6; border-left: 4px solid #c90; padding: 0.75rem 1rem; margin: 1rem 0; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.9rem; }
+    th, td { border: 1px solid #ddd; padding: 0.4rem 0.6rem; text-align: left; vertical-align: top; }
+    th { background: #f5f5f5; }
+    code { font-size: 0.85em; }
+  </style>
+</head>
+<body>
+  <h1>Experiment report</h1>
+  <p class="muted">run <code>{{ run_id }}</code> · project <code>{{ project_id }}</code> · {{ evaluates }} · {{ status }}</p>
+
+  {% if disclaimer %}
+  <div class="disclaimer"><strong>Disclaimer:</strong> {{ disclaimer }}</div>
+  {% endif %}
+
+  <h2>Metrics</h2>
+  {% if metrics_rows %}
+  <table>
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>config</th>
+        <th>recall@10</th>
+        <th>ndcg@10</th>
+        <th>answer_coverage@10</th>
+        <th>metrics</th>
+        <th>p50 ms</th>
+        <th>p95 ms</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in metrics_rows %}
+      <tr>
+        <td>{{ row.point_index }}</td>
+        <td><code>{{ row.config }}</code></td>
+        <td>{{ row.metrics.get('recall@10', '') }}</td>
+        <td>{{ row.metrics.get('ndcg@10', '') }}</td>
+        <td>{{ row.metrics.get('answer_coverage@10', '') }}</td>
+        <td><code>{{ row.metrics }}</code></td>
+        <td>{{ row.latency_p50_ms }}</td>
+        <td>{{ row.latency_p95_ms }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">No metrics rows.</p>
+  {% endif %}
+
+  <h2>By query type</h2>
+  {% set ns = namespace(has_breakdown=false) %}
+  {% for row in metrics_rows %}
+    {% if row.metrics.get('by_query_type') %}
+      {% set ns.has_breakdown = true %}
+    {% endif %}
+  {% endfor %}
+  {% if ns.has_breakdown %}
+  <table>
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>breakdown</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in metrics_rows %}
+      {% if row.metrics.get('by_query_type') %}
+      <tr>
+        <td>{{ row.point_index }}</td>
+        <td><code>{{ row.metrics.get('by_query_type') }}</code></td>
+      </tr>
+      {% endif %}
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">No query-type breakdown (set query_type on test queries).</p>
+  {% endif %}
+
+  <h2>Pareto front</h2>
+  {% if pareto %}
+  <table>
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>recall</th>
+        <th>latency_p95_ms</th>
+        <th>index_size_mb</th>
+        <th>config</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for p in pareto %}
+      <tr>
+        <td>{{ p.point_index }}</td>
+        <td>{{ "%.4f"|format(p.recall) }}</td>
+        <td>{{ "%.2f"|format(p.latency_p95_ms) }}</td>
+        <td>{{ "%.4f"|format(p.index_size_mb) }}</td>
+        <td><code>{{ p.config }}</code></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">No Pareto points.</p>
+  {% endif %}
+</body>
+</html>

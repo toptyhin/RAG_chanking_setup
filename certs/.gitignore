@@ -1,0 +1,7 @@
+# Ignore certificate material — keep only this folder metadata in git.
+*.crt
+*.cer
+*.pem
+*.key
+!.gitignore
+!README.md
