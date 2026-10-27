@@ -20,7 +20,7 @@ from rageval_llm_providers.catalog import ModelPurpose, RemoteModelInfo
 from rageval_llm_providers.factory import list_model_infos
 from rageval_api.services.shared_provider_connections import (
     heal_shared_provider_secrets,
-    sync_shared_provider_connections,
+    save_llm_config,
 )
 
 router = APIRouter(prefix="/llm", tags=["llm"])
@@ -186,11 +186,9 @@ def get_llm_config(request: Request) -> LlmConfigOut:
 
 @router.put("/config", response_model=LlmConfigOut)
 def put_llm_config(body: LlmConfigUpdate, request: Request) -> LlmConfigOut:
-    store = _store(request)
     patch: dict[str, Any] = body.model_dump(exclude_unset=True, exclude={"purpose"})
-    store.merge_update(patch)
-    updated, _emb = sync_shared_provider_connections(
-        store, _embedding_store(request), prefer="llm"
+    updated, _emb = save_llm_config(
+        _store(request), _embedding_store(request), patch
     )
     return _to_out(updated)
 

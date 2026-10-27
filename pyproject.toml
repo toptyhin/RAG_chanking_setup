@@ -48,6 +48,7 @@ ml = [
 chunkers = [
   "semchunk==4.1.1",
   "chunklet-py==2.3.2",
+  "py3langid==0.3.0",
   "littletree==0.9.1",
   "defusedxml==0.7.1",
   "tiktoken==0.13.0",

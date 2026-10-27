@@ -501,10 +501,12 @@ export const en = {
   rerankForm: {
     hint: "Selected model is used when an evaluation run has “Use reranker” enabled.",
     providerHint:
-      "Local Hugging Face is a cross-encoder. Remote providers use the shared connection config; remote rerank runtime still expects a loaded local model id for now.",
+      "Hugging Face is a local cross-encoder. Ollama reranks through a generative model (pairwise yes/no scoring): Ollama has no native rerank endpoint, so the model must support completion. OpenRouter and GigaChat currently save connection settings only.",
+    ollamaHint:
+      "Pick a completion-capable model, for example awenleven/Qwen3-Reranker-4B:Q4_K_M. Embedding/classifier-only GGUF models (for example Krakekai/qwen3-reranker-8b.gguf) cannot rerank: Ollama returns zero vectors for them and cannot generate text.",
     saved: "Rerank model saved.",
     noRemoteRuntime:
-      "Remote rerank: config and model list are saved; runtime still uses a local cross-encoder when the model is loaded.",
+      "Rerank via OpenRouter/GigaChat is not wired yet — only settings are saved. For a working rerank pick Ollama (completion model) or a Hugging Face cross-encoder.",
   },
   modelPicker: {
     embeddingLabel: "Embedding model",
@@ -732,6 +734,13 @@ export const en = {
       "nDCG@k — ranking quality in the top‑k; graded gains (primary/secondary) count more when present. Higher is better.",
     waiting: "Waiting for results…",
     noMetrics: "No metrics rows yet.",
+    qualityUnavailable:
+      "No quality metrics: none of the configurations completed successfully.",
+    failureTitle: "The run failed:",
+    partialFailureTitle: "Some configurations produced no metrics:",
+    allFailedTitle: "None of the configurations produced metrics:",
+    failurePoints: "{failed} of {total} configurations failed.",
+    failurePoint: "Config #{index}: {error}",
     config: "config",
     p50: "p50 ms",
     p95: "p95 ms",

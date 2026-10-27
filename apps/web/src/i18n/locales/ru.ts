@@ -506,10 +506,12 @@ export const ru: Messages = {
   rerankForm: {
     hint: "Выбранная модель используется, если на запуске оценки включён чекбокс «Использовать реранкер».",
     providerHint:
-      "Локальный Hugging Face — cross-encoder. Remote-провайдеры используют общий конфиг подключения; исполнение remote rerank пока через выбранный model id.",
+      "Hugging Face — локальный cross-encoder. Ollama выполняет rerank через генеративную модель (оценка пар запрос–фрагмент по ответу yes/no): отдельного rerank-эндпоинта у Ollama нет, поэтому нужна модель с поддержкой completion. OpenRouter и GigaChat пока сохраняют только настройки подключения.",
+    ollamaHint:
+      "Выберите модель с поддержкой генерации, например awenleven/Qwen3-Reranker-4B:Q4_K_M. Embedding/classifier-only GGUF (например Krakekai/qwen3-reranker-8b.gguf) для rerank не подходят: Ollama отдаёт для них нулевые векторы и не умеет генерировать.",
     saved: "Модель реранкера сохранена.",
     noRemoteRuntime:
-      "Remote rerank: конфиг и список моделей сохраняются; runtime пока использует локальный cross-encoder, если модель загружена.",
+      "Rerank через OpenRouter/GigaChat пока не исполняется — сохраняются только настройки. Для реального rerank выберите Ollama (completion-модель) или Hugging Face cross-encoder.",
   },
   modelPicker: {
     embeddingLabel: "Модель эмбеддингов",
@@ -737,6 +739,13 @@ export const ru: Messages = {
       "nDCG@k — качество ранжирования в top‑k; при graded-разметке (primary/secondary) важные чанки весят больше. Чем выше, тем лучше.",
     waiting: "Ожидание результатов…",
     noMetrics: "Строк метрик пока нет.",
+    qualityUnavailable:
+      "Метрик качества нет: ни одна конфигурация не завершилась успешно.",
+    failureTitle: "Прогон завершился с ошибкой:",
+    partialFailureTitle: "Часть конфигураций не дала метрик:",
+    allFailedTitle: "Ни одна конфигурация не дала метрик:",
+    failurePoints: "Ошибки в конфигурациях: {failed} из {total}.",
+    failurePoint: "Конфиг #{index}: {error}",
     config: "config",
     p50: "p50 мс",
     p95: "p95 мс",

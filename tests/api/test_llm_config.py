@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -16,6 +17,18 @@ def test_mask_secret() -> None:
     assert mask_secret("") is None
     assert mask_secret("abcd") == "••••"
     assert mask_secret("sk-abcdefghijklmnop").endswith("mnop")
+
+
+def test_llm_config_store_recovers_from_empty_file(tmp_path: Path) -> None:
+    path = tmp_path / "llm_config.json"
+    path.write_text("", encoding="utf-8")
+    store = LlmConfigStore(path)
+
+    loaded = store.load()
+    assert loaded.provider == TextLlmProvider.ollama
+    updated = store.merge_update({"ollama": {"model": "recovered"}})
+    assert updated.ollama.model == "recovered"
+    assert json.loads(path.read_text(encoding="utf-8"))["ollama"]["model"] == "recovered"
 
 
 def test_config_store_keeps_blank_secrets(tmp_path: Path) -> None:

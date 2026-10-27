@@ -27,6 +27,13 @@ from rageval_embedding_providers import (
 )
 from rageval_hf_hub import HfHubCatalog, HubModelInfo
 from rageval_hf_hub.local_cache import list_cached_hub_models
+from rageval_llm_providers.config import LlmConfig
+from rageval_llm_providers.rerank import (
+    OllamaGenerativeRerankProvider,
+    RerankConfig,
+    RerankProviderKind,
+    resolve_rerank_provider,
+)
 from rageval_rerank import (
     DEFAULT_CROSS_ENCODER,
     CrossEncoderRerankProvider,
@@ -109,12 +116,16 @@ class ModelRegistry:
         max_rerank: int = 2,
         validate_on_load: bool = True,
         embedding_config_loader: Callable[[], EmbeddingConfig] | None = None,
+        rerank_config_loader: Callable[[], RerankConfig | None] | None = None,
+        llm_config_loader: Callable[[], LlmConfig] | None = None,
     ) -> None:
         self.cache_dir = Path(cache_dir)
         self.catalog = catalog
         self.hf_token = hf_token
         self.validate_on_load = validate_on_load
         self._embedding_config_loader = embedding_config_loader
+        self._rerank_config_loader = rerank_config_loader
+        self._llm_config_loader = llm_config_loader
         self._fs_cache = FsEmbeddingCache(self.cache_dir)
         self._default_embedding_model = default_embedding_model
         self._default_rerank_model = default_rerank_model
@@ -332,6 +343,15 @@ class ModelRegistry:
             )
             self._jobs[job.job_id] = job
             return job
+        if kind is ModelKind.RERANK:
+            rerank_kind = _rerank_provider_kind(self, model_id)
+            if rerank_kind is RerankProviderKind.ollama:
+                return _load_remote_rerank(self, model_id)
+            if rerank_kind in {RerankProviderKind.openrouter, RerankProviderKind.gigachat}:
+                raise ValueError(
+                    f"rerank runtime for provider {rerank_kind.value!r} is not "
+                    "implemented; choose Ollama or Hugging Face"
+                )
 
         if not ml_available():
             raise MlNotAvailableError(
@@ -420,7 +440,61 @@ class ModelRegistry:
         mid = model_id.strip()
         if mid in {"reverse", "test"}:
             return ReverseRerankProvider()
-        return self.get_rerank_provider(mid)
+        try:
+            return self.get_rerank_provider(mid)
+        except LookupError:
+            if _rerank_provider_kind(self, mid) is RerankProviderKind.ollama:
+                _load_remote_rerank(self, mid)
+                return self.get_rerank_provider(mid)
+            raise
+
+
+def _rerank_provider_kind(
+    registry: ModelRegistry,
+    model_id: str,
+) -> RerankProviderKind:
+    config: RerankConfig | None = None
+    if registry._rerank_config_loader is not None:
+        config = registry._rerank_config_loader()
+    return resolve_rerank_provider(config, model_id)
+
+
+def _load_remote_rerank(registry: ModelRegistry, model_id: str) -> LoadJob:
+    llm = (
+        registry._llm_config_loader()
+        if registry._llm_config_loader is not None
+        else LlmConfig()
+    )
+    provider = OllamaGenerativeRerankProvider(
+        base_url=llm.ollama.base_url,
+        model=model_id,
+    )
+    with registry._lock:
+        registry._reranks[model_id] = _RerankEntry(
+            model_id=model_id, provider=provider
+        )
+        registry._reranks.move_to_end(model_id)
+        registry._current_rerank_model = model_id
+        while len(registry._reranks) > registry._max_rerank:
+            oldest_key, _ = next(iter(registry._reranks.items()))
+            if oldest_key == "reverse" and len(registry._reranks) > 1:
+                keys = list(registry._reranks.keys())
+                victim = next(key for key in keys if key != "reverse")
+                registry._reranks.pop(victim)
+            else:
+                if oldest_key == "reverse":
+                    break
+                registry._reranks.popitem(last=False)
+    job = LoadJob(
+        job_id=str(uuid.uuid4()),
+        kind=ModelKind.RERANK,
+        model_id=model_id,
+        stage="ready",
+        percent=100.0,
+        message="remote rerank ready (ollama)",
+    )
+    registry._jobs[job.job_id] = job
+    return job
 
 
 def _remote_embedding_config(registry: ModelRegistry) -> EmbeddingConfig | None:
@@ -601,6 +675,8 @@ def build_registry(
     hf_token: str | None = None,
     validate_on_load: bool = True,
     embedding_config_loader: Callable[[], EmbeddingConfig] | None = None,
+    rerank_config_loader: Callable[[], RerankConfig | None] | None = None,
+    llm_config_loader: Callable[[], LlmConfig] | None = None,
 ) -> ModelRegistry:
     catalog = HfHubCatalog(token=hf_token)
     return ModelRegistry(
@@ -612,4 +688,6 @@ def build_registry(
         hf_token=hf_token,
         validate_on_load=validate_on_load,
         embedding_config_loader=embedding_config_loader,
+        rerank_config_loader=rerank_config_loader,
+        llm_config_loader=llm_config_loader,
     )

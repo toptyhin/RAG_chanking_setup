@@ -1804,6 +1804,7 @@ chunkers = [
     { name = "chunklet-py" },
     { name = "defusedxml" },
     { name = "littletree" },
+    { name = "py3langid" },
     { name = "semchunk" },
     { name = "tiktoken" },
 ]
@@ -1837,6 +1838,7 @@ requires-dist = [
     { name = "mypy", marker = "extra == 'dev'", specifier = "==2.3.0" },
     { name = "numpy", specifier = "==2.5.1" },
     { name = "orjson", specifier = "==3.11.9" },
+    { name = "py3langid", marker = "extra == 'chunkers'", specifier = "==0.3.0" },
     { name = "pydantic", specifier = "==2.13.4" },
     { name = "pydantic-settings", specifier = "==2.14.2" },
     { name = "pypdf", specifier = "==6.14.2" },

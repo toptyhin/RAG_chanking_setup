@@ -2,16 +2,22 @@
 
 LLM and embedding configs are separate JSON files (models differ), but API keys,
 credentials, and base URLs must stay shared so connection tabs do not diverge.
+Both files are mutated by either ``PUT /llm/config`` or ``PUT /embedding/config``
+(and healed by GETs), so all read-modify-write cycles are serialized with one
+process-wide lock; the stores themselves write atomically.
 """
 
 from __future__ import annotations
 
-from typing import Literal
+import threading
+from typing import Any, Literal
 
 from rageval_embedding_providers import EmbeddingConfig, EmbeddingConfigStore
 from rageval_llm_providers import LlmConfig, LlmConfigStore
 
 Prefer = Literal["llm", "embedding"]
+
+CONFIG_LOCK = threading.RLock()
 
 
 def _nonempty(value: str | None) -> str | None:
@@ -25,6 +31,32 @@ def _pick_secret(preferred: str, other: str) -> str:
     return _nonempty(preferred) or _nonempty(other) or ""
 
 
+def save_llm_config(
+    llm_store: LlmConfigStore,
+    embedding_store: EmbeddingConfigStore,
+    patch: dict[str, Any],
+) -> tuple[LlmConfig, EmbeddingConfig]:
+    """Apply an LLM-config patch and sync shared connection fields (serialized)."""
+    with CONFIG_LOCK:
+        llm_store.merge_update(patch)
+        return sync_shared_provider_connections(
+            llm_store, embedding_store, prefer="llm"
+        )
+
+
+def save_embedding_config(
+    llm_store: LlmConfigStore,
+    embedding_store: EmbeddingConfigStore,
+    patch: dict[str, Any],
+) -> tuple[LlmConfig, EmbeddingConfig]:
+    """Apply an embedding-config patch and sync shared connection fields (serialized)."""
+    with CONFIG_LOCK:
+        embedding_store.merge_update(patch)
+        return sync_shared_provider_connections(
+            llm_store, embedding_store, prefer="embedding"
+        )
+
+
 def sync_shared_provider_connections(
     llm_store: LlmConfigStore,
     embedding_store: EmbeddingConfigStore,
@@ -32,6 +64,18 @@ def sync_shared_provider_connections(
     prefer: Prefer,
 ) -> tuple[LlmConfig, EmbeddingConfig]:
     """Unify shared connection fields; ``prefer`` wins for non-secret URLs/flags."""
+    with CONFIG_LOCK:
+        return _sync_shared_provider_connections_locked(
+            llm_store, embedding_store, prefer=prefer
+        )
+
+
+def _sync_shared_provider_connections_locked(
+    llm_store: LlmConfigStore,
+    embedding_store: EmbeddingConfigStore,
+    *,
+    prefer: Prefer,
+) -> tuple[LlmConfig, EmbeddingConfig]:
     llm = llm_store.load()
     emb = embedding_store.load()
 
@@ -73,6 +117,14 @@ def heal_shared_provider_secrets(
     embedding_store: EmbeddingConfigStore,
 ) -> tuple[LlmConfig, EmbeddingConfig]:
     """Copy missing secrets / drifted URLs so both stores share one connection."""
+    with CONFIG_LOCK:
+        return _heal_shared_provider_secrets_locked(llm_store, embedding_store)
+
+
+def _heal_shared_provider_secrets_locked(
+    llm_store: LlmConfigStore,
+    embedding_store: EmbeddingConfigStore,
+) -> tuple[LlmConfig, EmbeddingConfig]:
     llm = llm_store.load()
     emb = embedding_store.load()
 
@@ -95,6 +147,6 @@ def heal_shared_provider_secrets(
     elif _nonempty(emb.gigachat.credentials) and not _nonempty(llm.gigachat.credentials):
         prefer = "embedding"
 
-    return sync_shared_provider_connections(
+    return _sync_shared_provider_connections_locked(
         llm_store, embedding_store, prefer=prefer
     )

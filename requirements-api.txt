@@ -32,6 +32,8 @@ huggingface-hub==1.23.0
 # [chunkers] — keep in sync with pyproject optional-dependencies.chunkers
 semchunk==4.1.1
 chunklet-py==2.3.2
+# chunklet imports LanguageIdentifier.from_pickled_model; py3langid 0.4 removed it
+py3langid==0.3.0
 littletree==0.9.1
 defusedxml==0.7.1
 tiktoken==0.13.0

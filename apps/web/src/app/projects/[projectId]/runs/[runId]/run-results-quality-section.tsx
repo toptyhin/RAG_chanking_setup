@@ -1,5 +1,5 @@
 import { Section } from "@/components/ui";
-import { formatMetricValue } from "@/lib/metrics";
+import { formatMetricValue, isFailedRow } from "@/lib/metrics";
 import { useI18n } from "@/lib/locale";
 import type { MetricsRow } from "@/lib/types";
 import { configLabel, metricLabel } from "./run-results-labels";
@@ -18,6 +18,7 @@ export function RunResultsQualitySection({
   experimentStatus,
 }: RunResultsQualitySectionProps) {
   const { t } = useI18n();
+  const qualityRows = rows.filter((row) => !isFailedRow(row));
 
   return (
     <Section title={t("runPage.qualityTitle")} description={t("runPage.qualityDescription")}>
@@ -37,6 +38,8 @@ export function RunResultsQualitySection({
             ? t("runPage.waiting")
             : t("runPage.noMetrics")}
         </p>
+      ) : qualityRows.length === 0 ? (
+        <p className="text-sm text-[var(--muted)]">{t("runPage.qualityUnavailable")}</p>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
@@ -54,7 +57,7 @@ export function RunResultsQualitySection({
               </tr>
             </thead>
             <tbody>
-              {rows.map((row) => {
+              {qualityRows.map((row) => {
                 const isBest = best != null && row.point_index === best.point_index;
                 return (
                   <tr

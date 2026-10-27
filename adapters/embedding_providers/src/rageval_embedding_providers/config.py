@@ -3,13 +3,20 @@
 from __future__ import annotations
 
 import json
+import logging
 from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel, Field
 
-from rageval_llm_providers.config import default_ollama_base_url, mask_secret
+from rageval_llm_providers.config import (
+    default_ollama_base_url,
+    mask_secret,
+    write_json_atomic,
+)
+
+logger = logging.getLogger(__name__)
 
 
 class EmbeddingProviderKind(StrEnum):
@@ -62,20 +69,27 @@ class EmbeddingConfigStore:
         self.path = path
 
     def load(self) -> EmbeddingConfig:
-        if not self.path.is_file():
+        try:
+            text = self.path.read_text(encoding="utf-8")
+        except FileNotFoundError:
             return EmbeddingConfig()
-        raw = json.loads(self.path.read_text(encoding="utf-8"))
+        try:
+            raw = json.loads(text)
+        except json.JSONDecodeError as exc:
+            # A concurrent non-atomic writer (older builds) could leave the file
+            # empty/truncated; fall back to defaults instead of a 500 response.
+            logger.warning(
+                "invalid JSON in %s (%s); using defaults", self.path, exc
+            )
+            return EmbeddingConfig()
         if not isinstance(raw, dict):
+            logger.warning("%s is not a JSON object; using defaults", self.path)
             return EmbeddingConfig()
         return EmbeddingConfig.model_validate(raw)
 
     def save(self, config: EmbeddingConfig) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
         payload = config.model_dump(mode="json")
-        self.path.write_text(
-            json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
-            encoding="utf-8",
-        )
+        write_json_atomic(self.path, payload)
 
     def merge_update(self, patch: dict[str, Any]) -> EmbeddingConfig:
         """Apply a partial update; blank secrets keep previously stored values."""

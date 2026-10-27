@@ -10,6 +10,11 @@ from rageval_report import render_html_report
 from rageval_storage_fs import FileSystemObjectStore
 
 
+def _has_successful_point(rows: list[Any]) -> bool:
+    """True when at least one metrics row carries real metrics (not a failure stub)."""
+    return any((row.metrics or {}).get("status") != "failed" for row in rows)
+
+
 async def finalize_run(
     *,
     run_id: str,
@@ -20,7 +25,9 @@ async def finalize_run(
     run = await experiments.get(run_id, with_metrics=True)
     if run is None:
         raise LookupError("experiment run not found")
-    if run.status != "completed":
+    if run.status != "completed" or not _has_successful_point(run.metrics_rows):
+        # Failed runs (and runs where every point failed) have no quality
+        # results to report; keep meta as-is instead of publishing an empty report.
         return dict(run.meta)
 
     points = points_from_rows(run.metrics_rows)

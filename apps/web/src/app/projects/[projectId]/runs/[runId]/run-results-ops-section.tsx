@@ -1,5 +1,5 @@
 import { Section } from "@/components/ui";
-import { formatMetricValue } from "@/lib/metrics";
+import { formatMetricValue, isFailedRow } from "@/lib/metrics";
 import { useI18n } from "@/lib/locale";
 import type { MetricsRow } from "@/lib/types";
 import { metricLabel } from "./run-results-labels";
@@ -11,8 +11,9 @@ type RunResultsOpsSectionProps = {
 
 export function RunResultsOpsSection({ rows, secondaryKeys }: RunResultsOpsSectionProps) {
   const { t } = useI18n();
+  const succeededRows = rows.filter((row) => !isFailedRow(row));
 
-  if (secondaryKeys.length === 0 || rows.length === 0) return null;
+  if (secondaryKeys.length === 0 || succeededRows.length === 0) return null;
 
   return (
     <Section title={t("runPage.opsTitle")} description={t("runPage.opsDescription")}>
@@ -29,7 +30,7 @@ export function RunResultsOpsSection({ rows, secondaryKeys }: RunResultsOpsSecti
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => (
+            {succeededRows.map((row) => (
               <tr key={row.id} className="border-b border-[var(--border)]">
                 <td className="py-2 pr-3">{row.point_index}</td>
                 {secondaryKeys.map((k) => (

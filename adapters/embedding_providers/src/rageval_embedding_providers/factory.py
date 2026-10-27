@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
+import os
+
 from rageval_embedding_providers.config import EmbeddingConfig, EmbeddingProviderKind
 from rageval_embedding_providers.gigachat import GigaChatEmbeddingClient
 from rageval_embedding_providers.ollama import OllamaEmbeddingClient
 from rageval_embedding_providers.openrouter import OpenRouterEmbeddingClient
 from rageval_embedding_providers.protocol import EmbeddingRemoteProvider
-from rageval_embedding_providers.remote_provider import RemoteEmbeddingProvider
+from rageval_embedding_providers.remote_provider import (
+    DEFAULT_BATCH_SIZE,
+    RemoteEmbeddingProvider,
+)
 from rageval_llm_providers.catalog import (
     ModelPurpose,
     RemoteModelInfo,
@@ -23,6 +28,40 @@ _REMOTE_KINDS = frozenset(
     }
 )
 
+DEFAULT_EMBED_TIMEOUT_SEC = 120.0
+
+
+def _env_positive_float(name: str, default: float) -> float:
+    raw = os.getenv(name)
+    if raw is None or not raw.strip():
+        return default
+    try:
+        value = float(raw)
+    except ValueError:
+        return default
+    return value if value > 0 else default
+
+
+def _env_positive_int(name: str, default: int) -> int:
+    raw = os.getenv(name)
+    if raw is None or not raw.strip():
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        return default
+    return value if value > 0 else default
+
+
+def remote_embed_timeout_sec() -> float:
+    """Per-request timeout for remote embedding HTTP calls."""
+    return _env_positive_float("RAGEVAL_EMBED_TIMEOUT_SEC", DEFAULT_EMBED_TIMEOUT_SEC)
+
+
+def remote_embed_batch_size() -> int:
+    """How many texts one remote embedding HTTP request may carry."""
+    return _env_positive_int("RAGEVAL_EMBED_BATCH_SIZE", DEFAULT_BATCH_SIZE)
+
 
 def is_remote_embedding_provider(kind: EmbeddingProviderKind | str) -> bool:
     return EmbeddingProviderKind(kind) in _REMOTE_KINDS
@@ -34,21 +73,22 @@ def build_remote_client(
     model_id: str | None = None,
 ) -> EmbeddingRemoteProvider | None:
     mid = (model_id or "").strip() or None
+    timeout = remote_embed_timeout_sec()
     if config.provider == EmbeddingProviderKind.ollama:
         settings = config.ollama
         if mid:
             settings = settings.model_copy(update={"model": mid})
-        return OllamaEmbeddingClient(settings)
+        return OllamaEmbeddingClient(settings, timeout=timeout)
     if config.provider == EmbeddingProviderKind.openrouter:
         settings = config.openrouter
         if mid:
             settings = settings.model_copy(update={"model": mid})
-        return OpenRouterEmbeddingClient(settings)
+        return OpenRouterEmbeddingClient(settings, timeout=timeout)
     if config.provider == EmbeddingProviderKind.gigachat:
         settings = config.gigachat
         if mid:
             settings = settings.model_copy(update={"model": mid})
-        return GigaChatEmbeddingClient(settings)
+        return GigaChatEmbeddingClient(settings, timeout=timeout)
     return None
 
 
@@ -73,7 +113,11 @@ def build_embedding_provider(
     client = build_remote_client(config, model_id=mid)
     if client is None:
         return None
-    return RemoteEmbeddingProvider(client, model_name=mid)
+    return RemoteEmbeddingProvider(
+        client,
+        model_name=mid,
+        batch_size=remote_embed_batch_size(),
+    )
 
 
 def test_connection(config: EmbeddingConfig) -> ConnectionTestResult:

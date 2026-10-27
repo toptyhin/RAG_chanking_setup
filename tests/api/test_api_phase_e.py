@@ -140,3 +140,66 @@ async def test_experiment_rejects_three_axes(client: AsyncClient) -> None:
         },
     )
     assert bad.status_code == 400
+
+
+async def test_retrieval_all_points_failed_marks_run_failed(client: AsyncClient) -> None:
+    """A run where every grid point fails must not look like a successful run."""
+    project = (await client.post("/projects", json={"name": "E3"})).json()
+    pid = project["id"]
+    byo = await client.post(
+        f"/projects/{pid}/chunk-sets/import",
+        json={
+            "chunks": [
+                {"chunk_id": "c1", "doc_id": "d1", "text": "return window fourteen days"},
+                {"chunk_id": "c2", "doc_id": "d1", "text": "shipping takes three days"},
+            ]
+        },
+    )
+    assert byo.status_code == 201, byo.text
+    chunks_id = byo.json()["artifact"]["id"]
+    testset = await client.post(
+        f"/projects/{pid}/test-sets/import",
+        json={
+            "chunk_set_id": chunks_id,
+            "queries": [
+                {
+                    "query_id": "q1",
+                    "text": "return window fourteen days",
+                    "relevant_chunk_ids": ["c1"],
+                }
+            ],
+        },
+    )
+    assert testset.status_code == 201, testset.text
+    test_id = testset.json()["artifact"]["id"]
+
+    created = await client.post(
+        "/experiments",
+        json={
+            "project_id": pid,
+            "evaluates": "retrieval",
+            "chunk_set_id": chunks_id,
+            "test_set_id": test_id,
+            # Default test embedding provider is hash with dimension 32.
+            "fixed": {"embedding.dimension": 64},
+            "swept": {},
+        },
+    )
+    assert created.status_code == 201, created.text
+    run_id = created.json()["id"]
+
+    done = (
+        await client.get(f"/experiments/{run_id}", params={"wait": "true"})
+    ).json()
+    assert done["status"] == "failed", done
+    assert done["error"] and "all 1 point(s) failed" in done["error"]
+    assert done["meta"]["failed_points"] == 1
+    assert len(done["metrics_rows"]) == 1
+    row = done["metrics_rows"][0]
+    assert row["metrics"]["status"] == "failed"
+    assert "exceeds provider dimension" in row["metrics"]["error"]
+    # No quality results -> no empty Pareto/report artifacts.
+    assert done["pareto"] == []
+    assert done["report_object_key"] is None
+    report = await client.get(f"/experiments/{run_id}/report")
+    assert report.status_code == 404

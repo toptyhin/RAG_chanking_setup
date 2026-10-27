@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -14,6 +15,18 @@ from rageval_embedding_providers import (
     EmbeddingConfigStore,
     EmbeddingProviderKind,
 )
+
+
+def test_embedding_config_store_recovers_from_empty_file(tmp_path: Path) -> None:
+    path = tmp_path / "embedding_config.json"
+    path.write_text("", encoding="utf-8")
+    store = EmbeddingConfigStore(path)
+
+    loaded = store.load()
+    assert loaded.provider == EmbeddingProviderKind.sentence_transformers
+    updated = store.merge_update({"ollama": {"model": "recovered"}})
+    assert updated.ollama.model == "recovered"
+    assert json.loads(path.read_text(encoding="utf-8"))["ollama"]["model"] == "recovered"
 
 
 def test_embedding_config_store_keeps_blank_secrets(tmp_path: Path) -> None:

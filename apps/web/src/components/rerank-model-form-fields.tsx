@@ -97,16 +97,21 @@ export function RerankModelFormFields({
       ) : null}
 
       {draft.provider === "ollama" ? (
-        <OllamaProviderFields
-          value={draft.ollama}
-          onChange={(ollama) => setDraft((prev) => ({ ...prev, ollama }))}
-          dockerHint={t("providerForm.ollamaDockerHint")}
-          models={toModelsQueryState(
-            ollamaModels,
-            t("providerForm.modelsEmpty"),
-            failed,
-          )}
-        />
+        <>
+          <OllamaProviderFields
+            value={draft.ollama}
+            onChange={(ollama) => setDraft((prev) => ({ ...prev, ollama }))}
+            dockerHint={t("providerForm.ollamaDockerHint")}
+            models={toModelsQueryState(
+              ollamaModels,
+              t("providerForm.modelsEmpty"),
+              failed,
+            )}
+          />
+          <p className="text-xs text-[var(--muted)]">
+            {t("rerankForm.ollamaHint")}
+          </p>
+        </>
       ) : null}
 
       {draft.provider === "openrouter" ? (

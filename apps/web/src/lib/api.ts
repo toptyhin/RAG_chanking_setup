@@ -382,21 +382,24 @@ export function setCurrentEmbedding(modelId: string): Promise<{
   });
 }
 
-export function getCurrentRerank(): Promise<{
+export type CurrentRerank = {
   model_id: string;
   default_model: string;
-}> {
+  provider: string | null;
+};
+
+export function getCurrentRerank(): Promise<CurrentRerank> {
   return request("/models/rerank/current");
 }
 
-export function setCurrentRerank(modelId: string): Promise<{
-  model_id: string;
-  default_model: string;
-}> {
+export function setCurrentRerank(
+  modelId: string,
+  provider?: string,
+): Promise<CurrentRerank> {
   return request("/models/rerank/current", {
     method: "PUT",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ model_id: modelId }),
+    body: JSON.stringify({ model_id: modelId, provider }),
   });
 }
 

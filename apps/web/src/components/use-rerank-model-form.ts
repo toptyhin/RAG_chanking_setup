@@ -24,6 +24,7 @@ import {
   selectedRerankModel,
   writeStoredRerankProvider,
   type RerankDraft,
+  type RerankProviderKind,
 } from "@/components/rerank-model-form-types";
 
 export function useRerankModelForm() {
@@ -48,7 +49,16 @@ export function useRerankModelForm() {
   });
 
   useEffect(() => {
-    const provider = readStoredRerankProvider();
+    const localProvider = readStoredRerankProvider();
+    const serverProvider = current.data?.provider;
+    const provider: RerankProviderKind =
+      serverProvider === "ollama" ||
+      serverProvider === "huggingface" ||
+      serverProvider === "openrouter" ||
+      serverProvider === "gigachat"
+        ? serverProvider
+        : localProvider;
+    writeStoredRerankProvider(provider);
     const modelId = current.data?.model_id ?? DEFAULT_HF_RERANK;
     if (!config.data) {
       setDraft((prev) => ({
@@ -249,7 +259,7 @@ export function useRerankModelForm() {
       }
 
       writeStoredRerankProvider(draft.provider);
-      return setCurrentRerank(model);
+      return setCurrentRerank(model, draft.provider);
     },
     onSuccess: async (data) => {
       setFormError(null);

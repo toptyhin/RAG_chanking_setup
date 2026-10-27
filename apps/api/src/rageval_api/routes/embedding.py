@@ -20,7 +20,7 @@ from rageval_llm_providers import LlmConfigStore
 from rageval_llm_providers.catalog import ModelPurpose, RemoteModelInfo
 from rageval_api.services.shared_provider_connections import (
     heal_shared_provider_secrets,
-    sync_shared_provider_connections,
+    save_embedding_config,
 )
 
 router = APIRouter(prefix="/embedding", tags=["embedding"])
@@ -189,11 +189,9 @@ def get_embedding_config(request: Request) -> EmbeddingConfigOut:
 
 @router.put("/config", response_model=EmbeddingConfigOut)
 def put_embedding_config(body: EmbeddingConfigUpdate, request: Request) -> EmbeddingConfigOut:
-    store = _store(request)
     patch: dict[str, Any] = body.model_dump(exclude_unset=True)
-    store.merge_update(patch)
-    _llm, updated = sync_shared_provider_connections(
-        _llm_store(request), store, prefer="embedding"
+    _llm, updated = save_embedding_config(
+        _llm_store(request), _store(request), patch
     )
     return _to_out(updated)
 

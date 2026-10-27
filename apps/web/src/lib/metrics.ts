@@ -18,6 +18,10 @@ const HIDDEN_METRIC_KEYS = new Set([
   "by_query_type",
   "hnsw",
   "retrieve_k",
+  // Failure stubs written by the orchestrator for a point that raised; they are
+  // surfaced as an error banner, not as operational metrics.
+  "status",
+  "error",
 ]);
 
 export function isPrimaryMetric(key: string): boolean {
@@ -26,6 +30,19 @@ export function isPrimaryMetric(key: string): boolean {
 
 export function isHiddenMetric(key: string): boolean {
   return HIDDEN_METRIC_KEYS.has(key) || key.startsWith("by_");
+}
+
+export function isFailedRow(row: {
+  metrics: Record<string, unknown> | undefined;
+}): boolean {
+  return row.metrics?.status === "failed";
+}
+
+export function rowError(row: {
+  metrics: Record<string, unknown> | undefined;
+}): string | null {
+  const error = row.metrics?.error;
+  return typeof error === "string" && error.trim() ? error : null;
 }
 
 export function formatMetricValue(value: unknown): string {

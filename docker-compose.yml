@@ -38,6 +38,9 @@ services:
       EMBEDDING_MODEL: sentence-transformers/all-MiniLM-L6-v2
       # Via ollama-proxy on the host (see service above); Ollama can stay on 127.0.0.1
       OLLAMA_BASE_URL: http://host.docker.internal:11435
+      # Remote embedding batching / per-request timeout (defaults live in the adapter)
+      RAGEVAL_EMBED_BATCH_SIZE: ${RAGEVAL_EMBED_BATCH_SIZE:-32}
+      RAGEVAL_EMBED_TIMEOUT_SEC: ${RAGEVAL_EMBED_TIMEOUT_SEC:-120}
       # Persist Hugging Face / sentence-transformers weights across container rebuilds
       HF_HOME: /models
       HUGGINGFACE_HUB_CACHE: /models/hub

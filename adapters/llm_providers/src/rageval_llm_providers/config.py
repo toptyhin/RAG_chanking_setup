@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
+import uuid
 from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel, Field
+
+logger = logging.getLogger(__name__)
 
 
 class TextLlmProvider(StrEnum):
@@ -63,6 +67,20 @@ def mask_secret(value: str | None, *, keep: int = 4) -> str | None:
     return "•" * max(8, len(value) - keep) + value[-keep:]
 
 
+def write_json_atomic(path: Path, payload: dict[str, Any]) -> None:
+    """Write JSON via a temp file + ``os.replace`` so readers never see a half file."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
+    try:
+        with tmp.open("w", encoding="utf-8") as handle:
+            handle.write(json.dumps(payload, ensure_ascii=False, indent=2) + "\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(tmp, path)
+    finally:
+        tmp.unlink(missing_ok=True)
+
+
 class LlmConfigStore:
     """Load / save LLM config from ``data_dir/llm_config.json``."""
 
@@ -70,20 +88,27 @@ class LlmConfigStore:
         self.path = path
 
     def load(self) -> LlmConfig:
-        if not self.path.is_file():
+        try:
+            text = self.path.read_text(encoding="utf-8")
+        except FileNotFoundError:
             return LlmConfig()
-        raw = json.loads(self.path.read_text(encoding="utf-8"))
+        try:
+            raw = json.loads(text)
+        except json.JSONDecodeError as exc:
+            # A concurrent non-atomic writer (older builds) could leave the file
+            # empty/truncated; fall back to defaults instead of a 500 response.
+            logger.warning(
+                "invalid JSON in %s (%s); using defaults", self.path, exc
+            )
+            return LlmConfig()
         if not isinstance(raw, dict):
+            logger.warning("%s is not a JSON object; using defaults", self.path)
             return LlmConfig()
         return LlmConfig.model_validate(raw)
 
     def save(self, config: LlmConfig) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
         payload = config.model_dump(mode="json")
-        self.path.write_text(
-            json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
-            encoding="utf-8",
-        )
+        write_json_atomic(self.path, payload)
 
     def merge_update(self, patch: dict[str, Any]) -> LlmConfig:
         """Apply a partial update; blank secrets keep previously stored values."""

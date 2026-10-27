@@ -5,12 +5,18 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from rageval_api.model_registry import MlNotAvailableError, ModelKind, ModelRegistry
+from rageval_llm_providers.rerank import (
+    RerankConfigStore,
+    RerankProviderKind,
+    resolve_rerank_provider,
+)
 
 logger = logging.getLogger("rageval.models.storage")
 
@@ -82,10 +88,12 @@ class CurrentEmbeddingOut(BaseModel):
 class CurrentRerankOut(BaseModel):
     model_id: str
     default_model: str
+    provider: str | None = None
 
 
 class SetCurrentRequest(BaseModel):
     model_id: str = Field(min_length=1)
+    provider: str | None = None
 
 
 def _registry(request: Request) -> ModelRegistry:
@@ -93,6 +101,16 @@ def _registry(request: Request) -> ModelRegistry:
     if reg is None:
         raise HTTPException(status_code=503, detail="model registry not initialized")
     return reg
+
+
+def _rerank_store(request: Request) -> RerankConfigStore:
+    store = getattr(request.app.state, "rerank_config_store", None)
+    if store is None:
+        store = RerankConfigStore(
+            Path(request.app.state.settings.data_dir) / "rerank_config.json"
+        )
+        request.app.state.rerank_config_store = store
+    return store
 
 
 @router.post("/storage", response_model=StorageResponse)
@@ -231,22 +249,40 @@ async def set_current_embedding(body: SetCurrentRequest, request: Request) -> Cu
 @router.get("/rerank/current", response_model=CurrentRerankOut)
 async def get_current_rerank(request: Request) -> CurrentRerankOut:
     reg = _registry(request)
+    model_id = reg.current_rerank_model
+    provider = resolve_rerank_provider(_rerank_store(request).load_or_none(), model_id)
     return CurrentRerankOut(
-        model_id=reg.current_rerank_model,
+        model_id=model_id,
         default_model=reg.default_rerank_model,
+        provider=provider.value,
     )
 
 
 @router.put("/rerank/current", response_model=CurrentRerankOut)
 async def set_current_rerank(body: SetCurrentRequest, request: Request) -> CurrentRerankOut:
     reg = _registry(request)
+    store = _rerank_store(request)
+    provider = body.provider.strip() if body.provider else None
+    if provider:
+        try:
+            RerankProviderKind(provider)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=400,
+                detail=f"unsupported rerank provider: {provider!r}",
+            ) from exc
+    else:
+        provider = resolve_rerank_provider(store.load_or_none(), body.model_id).value
+
     try:
         reg.set_current_rerank_model(body.model_id)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    store.merge_update({"model": body.model_id, "provider": provider})
     return CurrentRerankOut(
         model_id=reg.current_rerank_model,
         default_model=reg.default_rerank_model,
+        provider=provider,
     )
 
 
@@ -259,6 +295,8 @@ async def _start_load(request: Request, kind: ModelKind, model_id: str) -> LoadR
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     if job.stage != "ready":

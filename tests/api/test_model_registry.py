@@ -13,6 +13,8 @@ from rageval_cache_fs import FsEmbeddingCache
 from rageval_domain.settings import get_settings
 from rageval_embedding import EmbeddingService, HashEmbeddingProvider
 from rageval_hf_hub import HfHubCatalog, HubModelInfo
+from rageval_llm_providers import LlmConfig
+from rageval_llm_providers.rerank import RerankConfig, RerankProviderKind
 from rageval_orchestrator.eval_point import embedding_for_point, rerank_for_point
 
 
@@ -164,6 +166,49 @@ async def test_registry_ollama_skips_hf_validation(
     assert again.provider.model_name == "nomic-embed-text:latest"
 
 
+@pytest.mark.asyncio
+async def test_registry_remote_ollama_rerank_skips_hf(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class _BoomCatalog(_FakeCatalog):
+        def validate_for_kind(self, kind, model_id):  # type: ignore[no-untyped-def]
+            raise LookupError(f"model not found on Hugging Face Hub: {model_id}")
+
+    class _FakeRemoteRerank:
+        def __init__(self, *, base_url: str, model: str) -> None:
+            self.base_url = base_url
+            self.model_name = model
+
+        def score(self, query, candidates):  # type: ignore[no-untyped-def]
+            return [1.0 for _ in candidates]
+
+    monkeypatch.setattr(
+        "rageval_api.model_registry.OllamaGenerativeRerankProvider",
+        _FakeRemoteRerank,
+    )
+
+    cache = FsEmbeddingCache(tmp_path / "cache")
+    base = EmbeddingService(HashEmbeddingProvider(), cache=cache)
+    reg = ModelRegistry(
+        cache_dir=tmp_path / "cache",
+        catalog=_BoomCatalog(),
+        default_embedding=base,
+        default_embedding_model="hash-emb-v1",
+        validate_on_load=True,
+        rerank_config_loader=lambda: RerankConfig(
+            provider=RerankProviderKind.ollama,
+            model="qwen3-reranker:latest",
+        ),
+        llm_config_loader=lambda: LlmConfig(
+            ollama={"base_url": "http://ollama.test", "model": "qwen3.5:9b"}
+        ),
+    )
+    provider = await reg.ensure_rerank("qwen3-reranker:latest")
+    assert isinstance(provider, _FakeRemoteRerank)
+    assert provider.base_url == "http://ollama.test"
+    assert reg.current_rerank_model == "qwen3-reranker:latest"
+
+
 @pytest.fixture
 async def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     data_dir = tmp_path / "data"
@@ -257,9 +302,30 @@ async def test_current_rerank_get_put(client: AsyncClient) -> None:
     )
     assert put.status_code == 200
     assert put.json()["model_id"] == "cross-encoder/ms-marco-MiniLM-L-6-v2"
+    assert put.json()["provider"] == "huggingface"
 
     again = await client.get("/models/rerank/current")
     assert again.json()["model_id"] == "cross-encoder/ms-marco-MiniLM-L-6-v2"
+    assert again.json()["provider"] == "huggingface"
+
+    saved = await client.put(
+        "/models/rerank/current",
+        json={"model_id": "qwen3-reranker:latest", "provider": "ollama"},
+    )
+    assert saved.status_code == 200
+    assert saved.json()["provider"] == "ollama"
+
+    current = await client.get("/models/rerank/current")
+    assert current.json()["model_id"] == "qwen3-reranker:latest"
+    assert current.json()["provider"] == "ollama"
+
+    invalid = await client.put(
+        "/models/rerank/current",
+        json={"model_id": "should-not-stick:latest", "provider": "nope"},
+    )
+    assert invalid.status_code == 400
+    current = await client.get("/models/rerank/current")
+    assert current.json()["model_id"] == "qwen3-reranker:latest"
 
     reverse = await client.put("/models/rerank/current", json={"model_id": "reverse"})
     assert reverse.status_code == 200

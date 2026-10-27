@@ -5,6 +5,7 @@ import { DifficultyBreakdown } from "@/components/difficulty-breakdown";
 import { Section } from "@/components/ui";
 import { flattenQueryTypeBreakdown } from "@/lib/query-type";
 import { useI18n } from "@/lib/locale";
+import { RunResultsFailureNotice } from "./run-results-failure-notice";
 import { RunResultsHeader } from "./run-results-header";
 import { RunResultsOpsSection } from "./run-results-ops-section";
 import { RunResultsParetoSection } from "./run-results-pareto-section";
@@ -24,6 +25,8 @@ export default function RunResultsPage() {
     rows,
     best,
     bestRecall,
+    failedPoints,
+    hasSuccessfulPoints,
     primaryKeys,
     secondaryKeys,
     progress,
@@ -42,6 +45,12 @@ export default function RunResultsPage() {
         isLoading={experiment.isLoading}
         isError={experiment.isError}
         error={experiment.error as Error | null}
+      />
+
+      <RunResultsFailureNotice
+        experiment={experiment.data}
+        rows={rows}
+        failedPoints={failedPoints}
       />
 
       {best && bestRecall != null && experiment.data?.status === "completed" ? (
@@ -71,12 +80,16 @@ export default function RunResultsPage() {
 
       <RunResultsOpsSection rows={rows} secondaryKeys={secondaryKeys} />
 
-      <RunResultsParetoSection chartData={chartData} pareto={pareto} />
+      {rows.length === 0 || hasSuccessfulPoints ? (
+        <RunResultsParetoSection chartData={chartData} pareto={pareto} />
+      ) : null}
 
-      <RunResultsReportSection
-        runId={runId}
-        reportObjectKey={experiment.data?.report_object_key}
-      />
+      {rows.length === 0 || hasSuccessfulPoints ? (
+        <RunResultsReportSection
+          runId={runId}
+          reportObjectKey={experiment.data?.report_object_key}
+        />
+      ) : null}
     </div>
   );
 }

@@ -30,6 +30,7 @@ from rageval_api.routes import (
 from rageval_domain.settings import get_settings
 from rageval_embedding_providers import EmbeddingConfigStore
 from rageval_llm_providers import LlmConfigStore, PromptStore
+from rageval_llm_providers.rerank import RerankConfigStore
 from rageval_metadb_sqlite import create_engine, create_session_factory, init_db
 from rageval_queue_local import LocalTaskRunner
 from rageval_storage_fs import FileSystemObjectStore
@@ -67,6 +68,9 @@ async def lifespan(app: FastAPI):
     app.state.embedding_config_store = EmbeddingConfigStore(
         settings.data_dir / "embedding_config.json"
     )
+    app.state.rerank_config_store = RerankConfigStore(
+        settings.data_dir / "rerank_config.json"
+    )
     app.state.model_registry = build_registry(
         cache_dir=settings.cache_dir,
         default_embedding=app.state.embedding_service,
@@ -74,7 +78,14 @@ async def lifespan(app: FastAPI):
         rerank_model=settings.rerank_model,
         hf_token=settings.hf_token,
         embedding_config_loader=app.state.embedding_config_store.load,
+        rerank_config_loader=app.state.rerank_config_store.load_or_none,
+        llm_config_loader=app.state.llm_config_store.load,
     )
+    # Restore the reranker selection across API restarts (model id used to be
+    # in-memory only; the provider+model now live in rerank_config.json).
+    rerank_config = app.state.rerank_config_store.load_or_none()
+    if rerank_config is not None and rerank_config.model.strip():
+        app.state.model_registry.set_current_rerank_model(rerank_config.model)
     app.state.qdrant = QdrantVectorStore(settings.qdrant_url)
     app.state.task_runner = LocalTaskRunner()
     app.state.prompt_store = PromptStore(settings.data_dir / "prompts.json")

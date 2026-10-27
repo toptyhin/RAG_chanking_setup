@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from dataclasses import dataclass
 from typing import Any, Callable
 
@@ -28,6 +29,8 @@ from rageval_storage_fs import FileSystemObjectStore
 from rageval_vectordb_qdrant import QdrantVectorStore
 
 LoadModel = Callable[[str, type], Any]
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -120,6 +123,12 @@ async def _evaluate_point_or_fail(
         )
         return metrics, p50, p95, index_run_id, False
     except Exception as point_exc:  # noqa: BLE001
+        logger.exception(
+            "retrieval point %s failed for run %s: %s",
+            point_index,
+            deps.run_id,
+            point_exc,
+        )
         return (
             {"status": "failed", "error": str(point_exc)},
             None,
@@ -161,6 +170,7 @@ async def _run_retrieval_lab(deps: RetrievalLabDeps) -> None:
         )
 
         failed_points = 0
+        first_failure: str | None = None
         for done, (point_index, point) in enumerate(ordered_points):
             metrics, p50, p95, index_run_id, failed = await _evaluate_point_or_fail(
                 deps,
@@ -176,6 +186,8 @@ async def _run_retrieval_lab(deps: RetrievalLabDeps) -> None:
             )
             if failed:
                 failed_points += 1
+                if first_failure is None:
+                    first_failure = str(metrics.get("error") or "unknown error")
             next_config = ordered_points[done + 1][1] if done + 1 < total else None
             await deps.experiments.add_metrics_row(
                 run_id=deps.run_id,
@@ -193,6 +205,17 @@ async def _run_retrieval_lab(deps: RetrievalLabDeps) -> None:
         meta_patch: dict[str, Any] = {}
         if failed_points:
             meta_patch["failed_points"] = failed_points
+        if total > 0 and failed_points == total:
+            # No configuration produced metrics: surface the run as failed so the
+            # API/UI show the error instead of an empty "completed" report.
+            await deps.experiments.update_status(
+                deps.run_id,
+                status="failed",
+                error=f"all {total} point(s) failed: {first_failure}",
+                meta=meta_patch or None,
+                merge_meta=bool(meta_patch),
+            )
+            return
         await deps.experiments.update_status(
             deps.run_id,
             status="completed",

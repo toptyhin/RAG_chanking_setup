@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { getExperiment, getProject, subscribeExperimentProgress } from "@/lib/api";
 import {
   bestRowByRecall,
+  isFailedRow,
   isHiddenMetric,
   isPrimaryMetric,
   recallFromMetrics,
@@ -53,6 +54,16 @@ export function useRunResults(projectId: string, runId: string) {
   );
   const best = useMemo(() => bestRowByRecall(rows), [rows]);
   const bestRecall = best ? recallFromMetrics(best.metrics) : null;
+
+  const failedRows = useMemo(() => rows.filter(isFailedRow), [rows]);
+  const hasSuccessfulPoints = useMemo(
+    () => rows.some((row) => !isFailedRow(row)),
+    [rows],
+  );
+  const failedPoints = useMemo(() => {
+    const raw = experiment.data?.meta?.failed_points;
+    return typeof raw === "number" ? raw : failedRows.length;
+  }, [experiment.data?.meta, failedRows.length]);
 
   const primaryKeys = Array.from(
     new Set(rows.flatMap((r) => Object.keys(r.metrics ?? {}))),
@@ -110,6 +121,9 @@ export function useRunResults(projectId: string, runId: string) {
     rows,
     best,
     bestRecall,
+    failedRows,
+    failedPoints,
+    hasSuccessfulPoints,
     primaryKeys,
     secondaryKeys,
     progress,
